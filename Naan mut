@@ -1,0 +1,94 @@
+import cv2
+
+# Open a video file or capture device
+cap = cv2.VideoCapture('road_video.mp4')  # Replace with 0 for webcam
+
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        break
+    
+    # Display the frame
+    cv2.imshow('Frame', frame)
+    
+    # Exit on pressing 'q'
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
+import numpy as np
+
+def process_image(image):
+    # Convert to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
+    # Apply Gaussian blur
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    
+    # Detect edges
+    edges = cv2.Canny(blur, 50, 150)
+    
+    return edges
+
+def region_of_interest(image):
+    height = image.shape[0]
+    polygons = np.array([
+        [(200, height), (1100, height), (550, 250)]
+    ])
+    mask = np.zeros_like(image)
+    cv2.fillPoly(mask, polygons, 255)
+    masked_image = cv2.bitwise_and(image, mask)
+    return masked_image
+
+def detect_lane_lines(image):
+    edges = process_image(image)
+    cropped_edges = region_of_interest(edges)
+    
+    # Detect lines using Hough Transform
+    lines = cv2.HoughLinesP(cropped_edges, 2, np.pi/180, 100, np.array([]), minLineLength=40, maxLineGap=5)
+    
+    return lines
+
+# Test on a frame
+cap = cv2.VideoCapture('road_video.mp4')
+ret, frame = cap.read()
+cap.release()
+
+lines = detect_lane_lines(frame)
+line_image = np.zeros_like(frame)
+if lines is not None:
+    for line in lines:
+        x1, y1, x2, y2 = line[0]
+        cv2.line(line_image, (x1, y1), (x2, y2), (255, 0, 0), 10)
+
+combo_image = cv2.addWeighted(frame, 0.8, line_image, 1, 1)
+cv2.imshow('Result', combo_image)
+cv2.waitKey(0)
+def average_slope_intercept(image, lines):
+    left_fit = []
+    right_fit = []
+    for line in lines:
+        x1, y1, x2, y2 = line[0]
+        parameters = np.polyfit((x1, x2), (y1, y2), 1)
+        slope = parameters[0]
+        intercept = parameters[1]
+        if slope < 0:
+            left_fit.append((slope, intercept))
+        else:
+            right_fit.append((slope, intercept))
+    
+    left_fit_average = np.average(left_fit, axis=0)
+    right_fit_average = np.average(right_fit, axis=0)
+    left_line = make_coordinates(image, left_fit_average)
+    right_line = make_coordinates(image, right_fit_average)
+    return np.array([left_line, right_line])
+
+def make_coordinates(image, line_parameters):
+    slope, intercept = line_parameters
+    y1 = image.shape[0]
+    y2 = int(y1 * (3 / 5))
+    x1 = int((y1 - intercept) / slope)
+    x2 = int((y2 - intercept) / slope)
+    return np.array([x1, y1, x
+cv2.destroyAllWindows()
